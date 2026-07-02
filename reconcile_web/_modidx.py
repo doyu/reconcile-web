@@ -7,4 +7,5 @@ d = { 'settings': { 'branch': 'main',
                 'lib_path': 'reconcile_web'},
   'syms': { 'reconcile_web.archive': { 'reconcile_web.archive.list_months': ('archive.html#list_months', 'reconcile_web/archive.py'),
                                        'reconcile_web.archive.month_counts': ('archive.html#month_counts', 'reconcile_web/archive.py'),
+                                       'reconcile_web.archive.safe_file': ('archive.html#safe_file', 'reconcile_web/archive.py'),
                                        'reconcile_web.archive.status_html': ('archive.html#status_html', 'reconcile_web/archive.py')}}}
