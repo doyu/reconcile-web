@@ -37,6 +37,9 @@ def create_app(
     # FastHTML's default static route can serve pdf/csv from cwd — an exempted path would bypass auth
     app, rt = fast_app(before=Beforeware(auth_before, skip=[r'/login']),
                        secret_key=session_secret, sess_https_only=True)
+    # this app serves no local static files (Pico CSS comes from the CDN); drop fast_app's
+    # default static route, which would otherwise shadow the dotted file routes below (.pdf/.csv)
+    app.router.routes = [r for r in app.router.routes if getattr(r, 'path', None) != '/{fname:path}.{ext:static}']
 
     def login_page(error=False):
         body = [Form(Input(name='password', type='password', required=True),
@@ -88,26 +91,5 @@ def create_app(
 
     @rt('/m/{month}/receipt/{name}', methods=['GET'])
     def receipt(month: str, name: str): return _file(month, 'receipt', name)
-
-    # Reorder routes so file routes with dots come before the static route
-    # (FastHTML's static route pattern /{fname:path}.{ext} would otherwise match and return 404)
-    routes_list = list(app.router.routes)
-    static_route_idx = None
-    file_route_indices = []
-    
-    for i, route in enumerate(routes_list):
-        route_str = str(route.path) if hasattr(route, 'path') else str(route)
-        if 'static' in route_str:
-            static_route_idx = i
-        elif any(x in route_str for x in ['statement.pdf', 'statement.csv', 'receipt']):
-            file_route_indices.append(i)
-    
-    if static_route_idx is not None and file_route_indices:
-        file_routes = [routes_list[i] for i in sorted(file_route_indices, reverse=True)]
-        for idx in sorted(file_route_indices, reverse=True):
-            routes_list.pop(idx)
-        for file_route in reversed(file_routes):
-            routes_list.insert(static_route_idx, file_route)
-        app.router.routes = routes_list
 
     return app
