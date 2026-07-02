@@ -33,12 +33,12 @@ def create_app(
     def auth_before(req, session):
         if not session.get('auth'): return RedirectResponse('/login', status_code=303)
 
-    # skip only /login: the app serves no local static files (Pico CSS comes from the CDN), and
-    # FastHTML's default static route can serve pdf/csv from cwd — an exempted path would bypass auth
+    # skip list covers only /login (every other route requires auth); the app serves no local
+    # static files (Pico CSS comes from the CDN), so fast_app's default static route is removed
+    # right after creation below — its extension list (pdf/csv) would otherwise shadow the
+    # dotted file routes (.pdf/.csv) defined further down
     app, rt = fast_app(before=Beforeware(auth_before, skip=[r'/login']),
                        secret_key=session_secret, sess_https_only=True)
-    # this app serves no local static files (Pico CSS comes from the CDN); drop fast_app's
-    # default static route, which would otherwise shadow the dotted file routes below (.pdf/.csv)
     app.router.routes = [r for r in app.router.routes if getattr(r, 'path', None) != '/{fname:path}.{ext:static}']
 
     def login_page(error=False):
@@ -52,7 +52,7 @@ def create_app(
 
     @rt('/login', methods=['POST'])
     def login_submit(password: str, session):
-        if password and secrets.compare_digest(password, app_password):
+        if password and secrets.compare_digest(password.encode(), app_password.encode()):
             session['auth'] = True
             return RedirectResponse('/', status_code=303)
         return login_page(error=True)
