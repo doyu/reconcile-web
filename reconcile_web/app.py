@@ -67,4 +67,13 @@ def create_app(
                  for m in list_months(archive_dir) for c in [month_counts(archive_dir, m)]]
         return Titled('reconcile-archive', Ul(*items), P(A('Logout', href='/logout')))
 
+    @rt('/m/{month}', methods=['GET'])
+    def month_view(month: str):
+        if month not in list_months(archive_dir): raise HTTPException(404)
+        return Titled(month,
+            P(A('statement.pdf', href=f'/m/{month}/statement.pdf'), ' · ',
+              A('statement.csv', href=f'/m/{month}/statement.csv')),
+            NotStr(status_html(archive_dir, month)),
+            P(A('← months', href='/')))
+
     return app
