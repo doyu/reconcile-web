@@ -1,6 +1,6 @@
 # reconcile-web — Design (v1)
 
-**Status:** design, approved for spec review (2026-07-02).
+**Status:** design, approved for spec review; revised after design review (2026-07-02).
 
 ## Goal
 
@@ -22,9 +22,36 @@ transaction, `status`, and a **relative link to each receipt**. So:
 - **No LLM at request time.** The viewer's work is deterministic, hot-path, and reliability-critical
   (financial data + auth). An LLM in the request path would be slower, costlier, non-deterministic —
   strictly worse. LLM stays where it belongs: build-time / the collection skill.
-- **Serve the Markdown directly.** Render `status.md` → HTML (a Markdown library), wrap it in the
-  authed layout, and rewrite the relative receipt links to authed download routes. This removes any
-  custom table parser/renderer. Minimum code, fully deterministic.
+- **Serve the Markdown directly.** Render `status.md` → HTML with **Python-Markdown** (`markdown`
+  package, `tables` extension), wrap it in the authed layout. Receipt links are rewritten **on the
+  raw Markdown text before rendering** (no HTML parsing): `](receipts/<name>.pdf)` →
+  `](/m/<month>/receipt/<name>.pdf)`, basename-only and `.pdf`-only. Raw HTML in `status.md` is
+  escaped, never passed through to the page. This removes any custom table parser/renderer.
+  Minimum code, fully deterministic.
+
+## The `status.md` contract
+
+The interface between the collection skill and this viewer. A valid `status.md`:
+
+```markdown
+# 2026-05 — receipt status
+
+| date | title | amount | status | receipt_file | note |
+|---|---|---|---|---|---|
+| 2026-05-29 | OPENAI *CHATGPT SUBSCR | -110.46 | collected | [2026-05-29_openai.pdf](receipts/2026-05-29_openai.pdf) | src=… |
+| 2026-05-06 | NORDEA | -20.46 | not-needed |  |  |
+
+**missing (retrievable from Gmail/portal/Nordea): 0**
+```
+
+- Status tokens in the table are `collected` and `not-needed` (**hyphen**, as materialized).
+- The `missing` count lives **only in the footer line** — no table row carries it.
+- `month_counts` tallies the status-column tokens as-is (keys are the raw tokens) and reads
+  `missing` from the footer line. Unknown tokens appear in the tally under their own key —
+  never silently dropped.
+- (Alternative considered: materialize a `counts.json` in the collection skill so the app parses
+  nothing. Deferred — the tally is a few lines here, vs. a new cross-repo artifact plus backfill
+  of 12 existing months. Revisit if the table format ever changes.)
 
 ## Global constraints
 
@@ -39,7 +66,7 @@ transaction, `status`, and a **relative link to each receipt**. So:
 ## Scope (v1 — the whole thing)
 
 1. **Login** — one shared password (from env), session cookie.
-2. **Month index** — list of the 12 month folders, each linking to its month view (show
+2. **Month index** — list of all month folders, each linking to its month view (show
    collected / not-needed / missing counts).
 3. **Month view** — render `status.md` (Markdown → HTML) as the transaction table; each row's
    receipt link points at an authed download route. Top of page: download links for
@@ -66,15 +93,17 @@ browser ──HTTPS──> [reverse proxy, user-owned] ──> uvicorn(FastHTML 
 Keep IO/parsing separate from routing so the data layer can later be lifted into a skill/MCP.
 
 - **`nbs/00_archive.ipynb` → `reconcile_web/archive.py`** — data access, UI-free, pure/testable:
-  - `list_months() -> list[str]` — sorted `["2025-07", …, "2026-06"]` from `ARCHIVE_DIR`.
-  - `month_counts(month) -> dict` — `{collected, not_needed, missing}` (cheap scan of `status.md`),
-    for the index. (This is the only bit of `status.md` we parse in code; the table itself is
-    rendered as Markdown, not parsed.)
-  - `status_html(month) -> str` — read `status.md`, Markdown→HTML, **rewrite `receipts/<f>` links**
-    to `/m/<month>/file/receipt/<f>`.
-  - `safe_file(month, kind, name) -> Path` — resolve a file to serve; `kind ∈ {statement_pdf,
-    statement_csv, receipt}`; reject path traversal; only return files that exist inside that
-    month's expected location.
+  - `list_months() -> list[str]` — sorted directories in `ARCHIVE_DIR` matching `^\d{4}-\d{2}$`
+    **and containing `status.md`** (ignores `README.md`, `vendors.md`, `.git`, strays).
+  - `month_counts(month) -> dict` — tally per the `status.md` contract above: raw status tokens
+    as keys (`collected`, `not-needed`, …) plus `missing` from the footer line. (This is the only
+    bit of `status.md` we parse; the table itself is rendered as Markdown, not parsed.)
+  - `status_html(month) -> str` — read `status.md`, rewrite `](receipts/<name>.pdf)` links to
+    `](/m/<month>/receipt/<name>.pdf)` on the raw text, then Markdown→HTML with raw HTML escaped.
+  - `safe_file(month, kind, name=None) -> Path` — resolve a file to serve; `kind ∈ {statement_pdf,
+    statement_csv, receipt}` (`name` used only for receipts); **raises `FileNotFoundError`** for
+    traversal (`..`, absolute paths, symlinks escaping the month dir) and for files that don't
+    exist inside that month's expected location — one error convention, the app maps it to 404.
 - **`nbs/01_app.ipynb` → `reconcile_web/app.py`** — the FastHTML app: `Beforeware` auth, routes,
   FT-component layout, file responses. Imports `archive`.
 
@@ -87,23 +116,39 @@ Keep IO/parsing separate from routing so the data layer can later be lifted into
 | `GET /login`, `POST /login`, `GET /logout` | single-password form; set/clear `session['auth']` |
 | `GET /` | month index (links + counts) |
 | `GET /m/{month}` | month view: `status_html(month)` inside layout + statement.pdf/csv links |
-| `GET /m/{month}/file/{kind}/{name}` | authed `FileResponse` via `safe_file` (statement.pdf / statement.csv / receipt) |
+| `GET /m/{month}/statement.pdf` | authed `FileResponse` via `safe_file(month, 'statement_pdf')` |
+| `GET /m/{month}/statement.csv` | authed `FileResponse` via `safe_file(month, 'statement_csv')` |
+| `GET /m/{month}/receipt/{name}` | authed `FileResponse` via `safe_file(month, 'receipt', name)` |
+
+(No generic `/file/{kind}/{name}` route: the statement filenames are fixed, so a `name` segment
+would be dead weight there, and per-kind routes keep the URL ↔ `kind` mapping trivial.)
 
 `{month}` is validated against `list_months()`; unknown → 404.
 
 ## Auth
 
-`Beforeware`: if `session.get('auth')` is unset and the path isn't `/login` (or the app's own CSS),
-redirect to `/login`. `POST /login` compares the submitted password to env `APP_PASSWORD`
-(constant-time compare) and sets `session['auth'] = True`. Single shared credential — no user table.
+`Beforeware`: redirect to `/login` when `session.get('auth')` is unset, with an explicit skip list
+— `/login` and the app's static assets under `/static/` (nothing else; data routes are never
+skipped). `POST /login` compares the submitted password to env `APP_PASSWORD` with
+`secrets.compare_digest` and sets `session['auth'] = True`. Single shared credential — no user
+table.
+
+Session cookie: signed with env `SESSION_SECRET` (not FastHTML's auto-generated `.sesskey`, which
+would silently rotate on redeploy and log the accountant out); flags `HttpOnly`, `SameSite=Lax`
+(Starlette defaults) and `Secure` (`sess_https_only=True` — HTTPS is guaranteed by the proxy).
 
 ## Security
 
-- Every route authed except `/login`; PDFs/CSVs served **only** through the authed `file` route
+- Every route authed except `/login`; PDFs/CSVs served **only** through the authed file routes
   (not `/static`), so downloads can't bypass auth.
 - `safe_file` prevents traversal: whitelist `kind`, `name` must match a receipt/statement file that
   actually exists within `ARCHIVE_DIR/<month>/…`; reject `..`, absolute paths, symlinks out.
-- `APP_PASSWORD` from env, never committed. Repo private. HTTPS enforced at the proxy.
+- Rendered `status.md` can't inject markup: raw HTML is escaped by the renderer, and link
+  rewriting only touches `](receipts/<basename>.pdf)` patterns — `javascript:` or path-bearing
+  hrefs are never produced. (No sanitizer library: content is self-generated, escaping is the
+  proportionate defense.)
+- `APP_PASSWORD` and `SESSION_SECRET` from env, never committed. Repo private. HTTPS enforced at
+  the proxy.
 - No rate-limiting / lockout in v1 (YAGNI; a single long password + HTTPS is the accepted bar).
 
 ## Data flow
@@ -113,27 +158,36 @@ No database, no writes, no external calls.
 
 ## Error handling
 
-- Missing `ARCHIVE_DIR` or unreadable month → clear error page (500 with a short message), logged.
-- Unknown month or file → 404.
+- Missing env (`APP_PASSWORD`, `SESSION_SECRET`, `ARCHIVE_DIR`) or unreadable `ARCHIVE_DIR` →
+  **fail fast at startup** with a clear message, not a broken app.
+- Unreadable month at request time → clear error page (500 with a short message), logged.
+- Unknown month or file (`safe_file` raises `FileNotFoundError`) → 404.
 - Wrong password → re-render `/login` with an error notice (no detail leakage).
 
 ## Testing (nbdev inline asserts)
 
-- `00_archive`: `list_months` returns sorted months for a fixture archive; `month_counts` matches a
-  known `status.md`; `status_html` rewrites `receipts/x.pdf` → the authed route and leaves other
-  Markdown intact; `safe_file` returns the right path for valid input and **raises/None for `..` and
-  unknown files**.
+- `00_archive`: `list_months` returns sorted months for a fixture archive **and skips non-month
+  entries** (`README.md`, a stray dir); `month_counts` matches a known `status.md` (hyphenated
+  `not-needed`, footer-line `missing`, an unknown token surfacing under its own key);
+  `status_html` rewrites `receipts/x.pdf` → the authed route, leaves other Markdown intact, and
+  **escapes a `<script>` planted in the fixture**; `safe_file` returns the right path for valid
+  input and **raises `FileNotFoundError`** for `..`, unknown files, and a
+  **symlink pointing outside the month dir** (e.g. `receipts/evil.pdf → /etc/hostname`).
 - `01_app`: smoke via FastHTML's test client — `/` and `/m/{month}` redirect to `/login` when
-  unauthenticated; after login they return 200; the `file` route serves an existing receipt and 404s
-  a bogus name.
+  unauthenticated; after login they return 200; the receipt route serves an existing receipt and
+  404s a bogus name.
 - Fixtures: a tiny throwaway archive dir (2 months, a couple of receipts) created in the test cell.
 
 ## Deployment (out of scope here)
 
 Owned by the user's automated CI/CD (VM spawn + secure config + deploy, learned from the Solveit2
 course). This app only commits to being automation-friendly: config via env (`APP_PASSWORD`,
-`ARCHIVE_DIR`), pinned deps, and a documented run command (`uvicorn reconcile_web.app:app` or a
-`serve()` entrypoint). No manual deploy steps are designed or maintained here.
+`SESSION_SECRET`, `ARCHIVE_DIR`), pinned deps, and a documented run command
+(`uvicorn reconcile_web.app:app` or a `serve()` entrypoint). No manual deploy steps are designed
+or maintained here.
+
+Runtime deps (to be declared in `pyproject.toml` `dependencies` — currently empty — at
+implementation time): `python-fasthtml` (brings uvicorn/starlette) and `markdown`.
 
 ## Future (noted, not built — YAGNI)
 
