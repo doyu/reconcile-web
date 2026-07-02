@@ -26,7 +26,9 @@ transaction, `status`, and a **relative link to each receipt**. So:
   package, `tables` extension), wrap it in the authed layout. Receipt links are rewritten **on the
   raw Markdown text before rendering** (no HTML parsing): `](receipts/<name>.pdf)` →
   `](/m/<month>/receipt/<name>.pdf)`, basename-only and `.pdf`-only. Raw HTML in `status.md` is
-  escaped, never passed through to the page. This removes any custom table parser/renderer.
+  escaped, never passed through to the page, and a post-render pass strips any `href` that does
+  not start with `/m/` — Markdown link syntax like `[x](javascript:…)` survives HTML escaping,
+  and the allowlist closes that hole. This removes any custom table parser/renderer.
   Minimum code, fully deterministic.
 
 ## The `status.md` contract
@@ -48,7 +50,8 @@ The interface between the collection skill and this viewer. A valid `status.md`:
 - The `missing` count lives **only in the footer line** — no table row carries it.
 - `month_counts` tallies the status-column tokens as-is (keys are the raw tokens) and reads
   `missing` from the footer line. Unknown tokens appear in the tally under their own key —
-  never silently dropped.
+  never silently dropped. A `status.md` without the footer line is malformed: `month_counts`
+  raises `ValueError` (fail closed — never a silent `missing: 0`).
 - (Alternative considered: materialize a `counts.json` in the collection skill so the app parses
   nothing. Deferred — the tally is a few lines here, vs. a new cross-repo artifact plus backfill
   of 12 existing months. Revisit if the table format ever changes.)
@@ -101,7 +104,8 @@ Keep IO/parsing separate from routing so the data layer can later be lifted into
   - `status_html(month) -> str` — read `status.md`, rewrite `](receipts/<name>.pdf)` links to
     `](/m/<month>/receipt/<name>.pdf)` on the raw text, then Markdown→HTML with raw HTML escaped.
   - `safe_file(month, kind, name=None) -> Path` — resolve a file to serve; `kind ∈ {statement_pdf,
-    statement_csv, receipt}` (`name` used only for receipts); **raises `FileNotFoundError`** for
+    statement_csv, receipt}` (`name` used only for receipts and must be a `.pdf` basename);
+    **raises `FileNotFoundError`** for
     traversal (`..`, absolute paths, symlinks escaping the month dir) and for files that don't
     exist inside that month's expected location — one error convention, the app maps it to 404.
 - **`nbs/01_app.ipynb` → `reconcile_web/app.py`** — the FastHTML app: `Beforeware` auth, routes,
@@ -128,8 +132,9 @@ would be dead weight there, and per-kind routes keep the URL ↔ `kind` mapping 
 ## Auth
 
 `Beforeware`: redirect to `/login` when `session.get('auth')` is unset, with an explicit skip list
-— `/login` and the app's static assets under `/static/` (nothing else; data routes are never
-skipped). `POST /login` compares the submitted password to env `APP_PASSWORD` with
+containing **only `/login`**. The app serves no local static assets (Pico CSS comes from the CDN),
+and FastHTML's default static route can serve `pdf`/`csv` from the working directory — an exempted
+static path would be an auth bypass, so nothing else is skipped. `POST /login` compares the submitted password to env `APP_PASSWORD` with
 `secrets.compare_digest` and sets `session['auth'] = True`. Single shared credential — no user
 table.
 
@@ -143,10 +148,11 @@ would silently rotate on redeploy and log the accountant out); flags `HttpOnly`,
   (not `/static`), so downloads can't bypass auth.
 - `safe_file` prevents traversal: whitelist `kind`, `name` must match a receipt/statement file that
   actually exists within `ARCHIVE_DIR/<month>/…`; reject `..`, absolute paths, symlinks out.
-- Rendered `status.md` can't inject markup: raw HTML is escaped by the renderer, and link
-  rewriting only touches `](receipts/<basename>.pdf)` patterns — `javascript:` or path-bearing
-  hrefs are never produced. (No sanitizer library: content is self-generated, escaping is the
-  proportionate defense.)
+- Rendered `status.md` can't inject markup: raw HTML is escaped by the renderer, link rewriting
+  only touches `](receipts/<basename>.pdf)` patterns, and a post-render allowlist strips any
+  `href` not starting with `/m/` — `javascript:` or external hrefs never reach the page.
+  (No sanitizer library: content is self-generated; escape + allowlist is the proportionate
+  defense.)
 - `APP_PASSWORD` and `SESSION_SECRET` from env, never committed. Repo private. HTTPS enforced at
   the proxy.
 - No rate-limiting / lockout in v1 (YAGNI; a single long password + HTTPS is the accepted bar).
@@ -160,7 +166,8 @@ No database, no writes, no external calls.
 
 - Missing env (`APP_PASSWORD`, `SESSION_SECRET`, `ARCHIVE_DIR`) or unreadable `ARCHIVE_DIR` →
   **fail fast at startup** with a clear message, not a broken app.
-- Unreadable month at request time → clear error page (500 with a short message), logged.
+- Unreadable or malformed month at request time (e.g. footer line missing → `ValueError`) →
+  clear error page (500 with a short message), logged.
 - Unknown month or file (`safe_file` raises `FileNotFoundError`) → 404.
 - Wrong password → re-render `/login` with an error notice (no detail leakage).
 
@@ -168,11 +175,13 @@ No database, no writes, no external calls.
 
 - `00_archive`: `list_months` returns sorted months for a fixture archive **and skips non-month
   entries** (`README.md`, a stray dir); `month_counts` matches a known `status.md` (hyphenated
-  `not-needed`, footer-line `missing`, an unknown token surfacing under its own key);
-  `status_html` rewrites `receipts/x.pdf` → the authed route, leaves other Markdown intact, and
-  **escapes a `<script>` planted in the fixture**; `safe_file` returns the right path for valid
-  input and **raises `FileNotFoundError`** for `..`, unknown files, and a
-  **symlink pointing outside the month dir** (e.g. `receipts/evil.pdf → /etc/hostname`).
+  `not-needed`, footer-line `missing`, an unknown token surfacing under its own key) and
+  **raises `ValueError` when the footer line is removed**; `status_html` rewrites
+  `receipts/x.pdf` → the authed route, leaves other Markdown intact, **escapes a `<script>`
+  planted in the fixture**, and **strips the href of a planted `[x](javascript:alert(1))`
+  link**; `safe_file` returns the right path for valid input and **raises `FileNotFoundError`**
+  for `..`, unknown files, a **non-`.pdf` name** (`secret.txt`), and a **symlink pointing
+  outside the month dir** (e.g. `receipts/evil.pdf → /etc/hostname`).
 - `01_app`: smoke via FastHTML's test client — `/` and `/m/{month}` redirect to `/login` when
   unauthenticated; after login they return 200; the receipt route serves an existing receipt and
   404s a bogus name.
