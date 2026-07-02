@@ -1,0 +1,9 @@
+project:
+  output-dir: _docs
+
+website:
+  title: "reconcile-web"
+  site-url: "https://doyu.github.io/reconcile-web"
+  description: ""
+  repo-branch: main
+  repo-url: "https://github.com/doyu/reconcile-web"
