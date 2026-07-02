@@ -76,6 +76,10 @@ def safe_file(
             raise FileNotFoundError(name)
         p = mdir/'receipts'/name
     else: raise FileNotFoundError(kind)
-    rp = p.resolve()  # follows symlinks; an escaping symlink lands outside mdir
-    if not (rp.is_file() and rp.is_relative_to(mdir)): raise FileNotFoundError(p)
+    try:
+        rp = p.resolve()  # follows symlinks; an escaping symlink lands outside mdir
+        ok = rp.is_file() and rp.is_relative_to(mdir)
+    except (ValueError, RuntimeError, OSError):  # null bytes, symlink loops, ...
+        raise FileNotFoundError(p) from None
+    if not ok: raise FileNotFoundError(p)
     return rp
