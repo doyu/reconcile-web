@@ -58,10 +58,22 @@ find package manager specific guidelines on
 
 ## How to use
 
-Fill me in please! Don’t forget code examples:
+A read-only viewer over a `reconcile-archive` checkout. Configuration is
+env-only:
 
-``` python
-1+1
+| env | meaning |
+|----|----|
+| `ARCHIVE_DIR` | path to the reconcile-archive checkout |
+| `APP_PASSWORD` | the single shared login password |
+| `SESSION_SECRET` | session-cookie signing key (generate once per deployment) |
+
+Run:
+
+``` sh
+ARCHIVE_DIR=~/reconcile-archive APP_PASSWORD=... SESSION_SECRET=... \
+  uvicorn --factory reconcile_web.app:create_app
 ```
 
-    2
+or `python -c "from reconcile_web.app import serve; serve()"`. HTTPS
+termination is the reverse proxy’s job; the app must never be exposed
+directly.
