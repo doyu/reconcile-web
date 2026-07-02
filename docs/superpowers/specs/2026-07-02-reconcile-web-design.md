@@ -133,10 +133,12 @@ would be dead weight there, and per-kind routes keep the URL ↔ `kind` mapping 
 
 `Beforeware`: redirect to `/login` when `session.get('auth')` is unset, with an explicit skip list
 containing **only `/login`**. The app serves no local static assets (Pico CSS comes from the CDN),
-and FastHTML's default static route can serve `pdf`/`csv` from the working directory — an exempted
-static path would be an auth bypass, so nothing else is skipped. `POST /login` compares the submitted password to env `APP_PASSWORD` with
-`secrets.compare_digest` and sets `session['auth'] = True`. Single shared credential — no user
-table.
+and `fast_app()`'s default static route is **removed right after app creation**: its extension
+list includes `pdf`/`csv`, so left in place it would both shadow the dotted file routes above
+(`/m/…/statement.pdf` would match it first and 404) and be an auth bypass if ever exempted.
+`POST /login` compares the submitted password to env `APP_PASSWORD` with
+`secrets.compare_digest` (on encoded bytes, so non-ASCII passwords work) and sets
+`session['auth'] = True`. Single shared credential — no user table.
 
 Session cookie: signed with env `SESSION_SECRET` (not FastHTML's auto-generated `.sesskey`, which
 would silently rotate on redeploy and log the accountant out); flags `HttpOnly`, `SameSite=Lax`
