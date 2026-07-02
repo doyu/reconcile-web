@@ -5,4 +5,4 @@ d = { 'settings': { 'branch': 'main',
                 'doc_host': 'https://doyu.github.io',
                 'git_url': 'https://github.com/doyu/reconcile-web',
                 'lib_path': 'reconcile_web'},
-  'syms': {'reconcile_web.core': {'reconcile_web.core.foo': ('core.html#foo', 'reconcile_web/core.py')}}}
+  'syms': {'reconcile_web.archive': {}}}

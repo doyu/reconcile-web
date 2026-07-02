@@ -15,7 +15,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
 ]
-dependencies = []
+dependencies = ["python-fasthtml==0.14.4", "markdown==3.10.2"]
 
 [project.urls]
 Repository = "https://github.com/doyu/reconcile-web"
