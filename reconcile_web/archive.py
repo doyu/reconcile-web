@@ -68,7 +68,9 @@ def safe_file(
 ) -> Path:                  # resolved file inside the month dir
     "Resolve a servable file; raise FileNotFoundError on traversal or anything missing"
     if not MONTH_RE.match(month): raise FileNotFoundError(month)
-    mdir = (Path(archive_dir)/month).resolve()
+    root = Path(archive_dir).resolve()
+    mdir = (root/month).resolve()
+    if not mdir.is_relative_to(root): raise FileNotFoundError(month)  # month dir symlinked out
     if kind == 'statement_pdf':   p = mdir/'statement.pdf'
     elif kind == 'statement_csv': p = mdir/'statement.csv'
     elif kind == 'receipt':
