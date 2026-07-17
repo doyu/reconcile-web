@@ -17,6 +17,9 @@ classifiers = [
 ]
 dependencies = ["python-fasthtml==0.14.4", "markdown==3.10.2"]
 
+[project.scripts]
+reconcile-push = "reconcile_web.sync:reconcile_push"
+
 [project.urls]
 Repository = "https://github.com/doyu/reconcile-web"
 Documentation = "https://doyu.github.io/reconcile-web/"
