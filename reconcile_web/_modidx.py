@@ -11,5 +11,7 @@ d = { 'settings': { 'branch': 'main',
                                        'reconcile_web.archive.month_counts': ('archive.html#month_counts', 'reconcile_web/archive.py'),
                                        'reconcile_web.archive.safe_file': ('archive.html#safe_file', 'reconcile_web/archive.py'),
                                        'reconcile_web.archive.status_html': ('archive.html#status_html', 'reconcile_web/archive.py')},
+            'reconcile_web.deploy': { 'reconcile_web.deploy.deploy_cmd': ('deploy.html#deploy_cmd', 'reconcile_web/deploy.py'),
+                                      'reconcile_web.deploy.reconcile_deploy': ('deploy.html#reconcile_deploy', 'reconcile_web/deploy.py')},
             'reconcile_web.sync': { 'reconcile_web.sync.push_cmd': ('sync.html#push_cmd', 'reconcile_web/sync.py'),
                                     'reconcile_web.sync.reconcile_push': ('sync.html#reconcile_push', 'reconcile_web/sync.py')}}}

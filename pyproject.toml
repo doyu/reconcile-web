@@ -19,6 +19,7 @@ dependencies = ["python-fasthtml==0.14.4", "markdown==3.10.2"]
 
 [project.scripts]
 reconcile-push = "reconcile_web.sync:reconcile_push"
+reconcile-deploy = "reconcile_web.deploy:reconcile_deploy"
 
 [project.urls]
 Repository = "https://github.com/doyu/reconcile-web"
