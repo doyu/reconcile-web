@@ -7,3 +7,8 @@ website:
   description: ""
   repo-branch: main
   repo-url: "https://github.com/doyu/reconcile-web"
+
+format-links:
+  - html
+  - format: commonmark
+    text: Markdown
