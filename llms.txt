@@ -1,0 +1,14 @@
+# reconcile-web
+
+> Read-only FastHTML viewer serving an accountant the monthly bank statements and receipts
+> from the private reconcile-archive repo, behind a single shared password. Also the user's
+> educational project for learning FastHTML + nbdev, with design/plan records and kata notes.
+
+<!-- BEGIN AUTO -->
+## Files
+
+- [README.md](README.md): nbdev-generated readme: install, env config (ARCHIVE_DIR/APP_PASSWORD/SESSION_SECRET), run commands
+- [docs/superpowers/specs/2026-07-02-reconcile-web-design.md](docs/superpowers/specs/2026-07-02-reconcile-web-design.md): Approved v1 design: deterministic thin viewer over the status.md contract, security invariants, auth
+- [docs/superpowers/plans/2026-07-02-reconcile-web-v1.md](docs/superpowers/plans/2026-07-02-reconcile-web-v1.md): Task-by-task TDD implementation plan for v1: two nbdev notebooks, auth gate, routes, tests
+- [nbs/2026-07-18-index-table-kata.md](nbs/2026-07-18-index-table-kata.md): FastHTML lessons from the index-table kata: FT escaping, route identity, kernel state, CSS, TestClient
+<!-- END AUTO -->
