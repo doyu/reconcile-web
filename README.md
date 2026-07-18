@@ -5,8 +5,7 @@
 
 ## Developer Guide
 
-If you are new to using `nbdev` here are some useful pointers to get you
-started.
+If you are new to using `nbdev` here are some useful pointers to get you started.
 
 ### Install reconcile_web in Development mode
 
@@ -26,8 +25,7 @@ $ nbdev_prepare
 ### Installation
 
 This is a private repository (real financial data lives in the companion
-`reconcile-archive` repo) — it is not published to pypi or conda.
-Install from a clone:
+`reconcile-archive` repo) — it is not published to pypi or conda. Install from a clone:
 
 ``` sh
 $ git clone https://github.com/doyu/reconcile-web.git
@@ -36,14 +34,11 @@ $ cd reconcile-web && pip install -e .
 
 ### Documentation
 
-Documentation can be found hosted on this GitHub
-[repository](https://github.com/doyu/reconcile-web)’s
-[pages](https://doyu.github.io/reconcile-web/).
+Documentation can be found hosted on this GitHub [repository](https://github.com/doyu/reconcile-web)’s [pages](https://doyu.github.io/reconcile-web/).
 
 ## How to use
 
-A read-only viewer over a `reconcile-archive` checkout. Configuration is
-env-only:
+A read-only viewer over a `reconcile-archive` checkout. Configuration is env-only:
 
 | env | meaning |
 |----|----|
@@ -58,6 +53,5 @@ ARCHIVE_DIR=~/reconcile-archive APP_PASSWORD=... SESSION_SECRET=... \
   uvicorn --factory reconcile_web.app:create_app
 ```
 
-or `python -c "from reconcile_web.app import serve; serve()"`. HTTPS
-termination is the reverse proxy’s job; the app must never be exposed
-directly.
+or `python -c "from reconcile_web.app import serve; serve()"`. HTTPS termination is the
+reverse proxy’s job; the app must never be exposed directly.

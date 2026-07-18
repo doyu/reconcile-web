@@ -49,18 +49,18 @@ def create_app(
 
     def month_row(m):
         c = month_counts(archive_dir, m)
-        missing = c.get('missing', 0) 
+        missing = c.get('missing', 0)
         return Tr(
             Td(A(m, href=f'/m/{m}')),
             Td(c.get('collected', 0)),
             Td(c.get('not-needed', 0)),
             Td(missing),
             cls='has-missing' if missing else None)
-        
+
     def months_table():
         return Table(
             Thead(Tr(Th('month'), Th('collected'), Th('not-needed'), Th('missing'))),
-            Tbody(*[month_row(m) for m in list_months(archive_dir)]))
+            Tbody(*[month_row(m) for m in reversed(list_months(archive_dir))]))
 
     @rt('/login', methods=['GET'])
     def login_form(): return login_page()
