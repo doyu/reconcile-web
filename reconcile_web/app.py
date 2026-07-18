@@ -10,7 +10,7 @@ __all__ = ['create_app', 'serve']
 # %% ../nbs/01_app.ipynb #8b6a1971
 import os, secrets
 from pathlib import Path
-from fasthtml.common import fast_app, Beforeware, Titled, Form, Input, Button, P, Ul, Li, A, NotStr
+from fasthtml.common import *
 from starlette.responses import RedirectResponse, FileResponse
 from starlette.exceptions import HTTPException
 from .archive import list_months, month_counts, status_html, safe_file
@@ -47,6 +47,21 @@ def create_app(
         if error: body.insert(0, P('Wrong password'))
         return Titled('Login', *body)
 
+    def month_row(m):
+        c = month_counts(archive_dir, m)
+        missing = c.get('missing', 0) 
+        return Tr(
+            Td(A(m, href=f'/m/{m}')),
+            Td(c.get('collected', 0)),
+            Td(c.get('not-needed', 0)),
+            Td(missing),
+            cls='has-missing' if missing else None)
+        
+    def months_table():
+        return Table(
+            Thead(Tr(Th('month'), Th('collected'), Th('not-needed'), Th('missing'))),
+            Tbody(*[month_row(m) for m in list_months(archive_dir)]))
+
     @rt('/login', methods=['GET'])
     def login_form(): return login_page()
 
@@ -64,11 +79,10 @@ def create_app(
 
     @rt('/', methods=['GET'])
     def index():
-        items = [Li(A(m, href=f'/m/{m}'),
-                    f" — collected {c.get('collected', 0)}, not-needed {c.get('not-needed', 0)},"
-                    f" missing {c.get('missing', 0)}")
-                 for m in list_months(archive_dir) for c in [month_counts(archive_dir, m)]]
-        return Titled('reconcile-archive', Ul(*items), P(A('Logout', href='/logout')))
+        return Titled('reconcile-archive',
+                      Style('.has-missing td {color: var(--pico-del-color, #c62828)}'),
+                      months_table(),
+                      P(A('Logout', href='/logout')))
 
     @rt('/m/{month}', methods=['GET'])
     def month_view(month: str):
