@@ -40,12 +40,20 @@ def create_app(
         return P(A('statement.pdf', href=f'/m/{m}/statement.pdf'), ' · ',
                  A('statement.csv', href=f'/m/{m}/statement.csv'))
 
+    # app-wide CSS: missing-row highlight, inline expand buttons, tucked statement
+    # links, and hiding status.md's own "# YYYY-MM — receipt status" H1 — the page
+    # already names the month, and status.md is an opaque NotStr (never parsed)
+    css = Style('.has-missing td {color: var(--pico-del-color, #c62828)}\n'
+                'tbody button {width: auto; display: inline-block; padding: 0 .5em; margin-right: .5em}\n'
+                'tr[id^="detail-"] p:first-child {margin: 0; text-align: right; font-size: .85em}\n'
+                'tr[id^="detail-"] h1, main > h1 ~ h1 {display: none}')
+
     # skip list covers only /login (every other route requires auth); the app serves no local
     # static files (Pico CSS comes from the CDN), so fast_app's default static route is removed
     # right after creation below — its extension list (pdf/csv) would otherwise shadow the
     # dotted file routes (.pdf/.csv) defined further down
     app, rt = fast_app(before=Beforeware(auth_before, skip=[r'/login']),
-                       secret_key=session_secret, sess_https_only=True)
+                       secret_key=session_secret, sess_https_only=True, hdrs=(css,))
     app.router.routes = [r for r in app.router.routes if getattr(r, 'path', None) != '/{fname:path}.{ext:static}']
 
     def login_page(error=False):
@@ -98,9 +106,6 @@ def create_app(
     @rt('/', methods=['GET'])
     def index():
         return Titled('reconcile-archive',
-                      Style('.has-missing td {color: var(--pico-del-color, #c62828)}\n'
-                            'tbody button {width: auto; display: inline-block; padding: 0 .5em; margin-right: .5em}\n'
-                            'tr[id^="detail-"] p:first-child {margin: 0; text-align: right; font-size: .85em}'),
                       months_table(),
                       P(A('Logout', href='/logout')))
 
