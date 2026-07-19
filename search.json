@@ -1,0 +1,136 @@
+[
+  {
+    "objectID": "archive.html",
+    "href": "archive.html",
+    "title": "archive",
+    "section": "",
+    "text": "# test fixture: a throwaway archive matching the status.md contract in the spec\nimport tempfile\nfrom pathlib import Path\n\nSTATUS_MD = \"\"\"# {m} — receipt status\n\n| date | title | amount | status | receipt_file | note |\n|---|---|---|---|---|---|\n| {m}-29 | OPENAI *CHATGPT SUBSCR | -110.46 | collected | [{m}-29_openai.pdf](receipts/{m}-29_openai.pdf) | src=x.pdf |\n| {m}-06 | NORDEA | -20.46 | not-needed |  |  |\n\n**missing (retrievable from Gmail/portal/Nordea): 1**\n\"\"\"\n\ndef make_archive(months=('2025-07', '2025-08')):\n    root = Path(tempfile.mkdtemp())\n    (root/'README.md').write_text('readme')\n    (root/'notamonth').mkdir()\n    for m in months:\n        d = root/m\n        (d/'receipts').mkdir(parents=True)\n        (d/'statement.pdf').write_bytes(b'%PDF-1.4 fake')\n        (d/'statement.csv').write_text('date;amount\\n')\n        (d/'status.md').write_text(STATUS_MD.format(m=m))\n        (d/'receipts'/f'{m}-29_openai.pdf').write_bytes(b'%PDF-1.4 fake receipt')\n    return root\n\n\n\nlist_months\ndef list_months(\n    archive_dir:str | pathlib.Path, # path to the reconcile-archive checkout\n)-&gt;list: # sorted month names like '2025-07'\nMonth directories (YYYY-MM containing a status.md) in sorted order\n\nroot = make_archive()\nassert list_months(root) == ['2025-07', '2025-08']\n(root/'2030-01').mkdir()  # month-shaped dir without status.md -&gt; excluded\nassert list_months(root) == ['2025-07', '2025-08']\n\n\n\n\nmonth_counts\ndef month_counts(\n    archive_dir:str | pathlib.Path, # archive root\n    month:str, # month name like '2025-07'\n)-&gt;dict: # raw status tokens -&gt; count, plus 'missing' from the footer line\nTally the status column of status.md; read missing from the footer\n\nroot = make_archive()\nassert month_counts(root, '2025-07') == {'collected': 1, 'not-needed': 1, 'missing': 1}\n# unknown tokens surface under their own key, never silently dropped\nsm = root/'2025-08'/'status.md'\nsm.write_text(sm.read_text().replace('not-needed', 'wtf-token'))\nc = month_counts(root, '2025-08')\nassert c['wtf-token'] == 1 and 'not-needed' not in c\n# malformed status.md (no footer line) fails closed, never a silent missing=0\nsm.write_text('\\n'.join(l for l in sm.read_text().splitlines() if not l.startswith('**missing')))\ntry: month_counts(root, '2025-08'); assert False, 'should have raised'\nexcept ValueError: pass\n\n\n\n\nstatus_html\ndef status_html(\n    archive_dir:str | pathlib.Path, # archive root\n    month:str, # month name like '2025-07'\n)-&gt;str: # HTML fragment of the rendered status.md\nRender status.md to HTML: rewrite receipt links, escape raw HTML, allowlist hrefs\n\nroot = make_archive()\nh = status_html(root, '2025-07')\nassert '/m/2025-07/receipt/2025-07-29_openai.pdf' in h\nassert '](receipts/' not in h and 'href=\"receipts/' not in h\nassert '&lt;table&gt;' in h                       # tables extension active\nassert 'not-needed' in h                    # rest of the Markdown intact\n# raw HTML must be escaped, not passed through\nsm = root/'2025-07'/'status.md'\nsm.write_text(sm.read_text() + '\\n&lt;script&gt;alert(1)&lt;/script&gt;\\n')\nh = status_html(root, '2025-07')\nassert '&lt;script&gt;' not in h and '&lt;script&gt;' in h\n# Markdown link syntax survives HTML escaping — the href allowlist must strip it\nsm.write_text(sm.read_text() + '\\n[evil](javascript:alert(1))\\n')\nh = status_html(root, '2025-07')\nassert 'javascript:' not in h\nassert 'href=\"/m/2025-07/receipt/2025-07-29_openai.pdf\"' in h  # receipt hrefs survive the allowlist\n\n\n\n\nsafe_file\ndef safe_file(\n    archive_dir:str | pathlib.Path, # archive root\n    month:str, # month name like '2025-07'\n    kind:str, # 'statement_pdf' | 'statement_csv' | 'receipt'\n    name:str | None=None, # receipt filename (receipt kind only)\n)-&gt;Path: # resolved file inside the month dir\nResolve a servable file; raise FileNotFoundError on traversal or anything missing\n\nroot = make_archive()\n\ndef rejects(*a):\n    try: safe_file(*a)\n    except FileNotFoundError: return True\n    return False\n\nassert safe_file(root, '2025-07', 'statement_pdf').name == 'statement.pdf'\nassert safe_file(root, '2025-07', 'statement_csv').is_file()\nassert safe_file(root, '2025-07', 'receipt', '2025-07-29_openai.pdf').is_file()\nassert rejects(root, '2025-07', 'receipt', '../statement.pdf')      # traversal\nassert rejects(root, '2025-07', 'receipt', '/etc/hostname')         # absolute\nassert rejects(root, '2025-07', 'receipt', 'nope.pdf')              # missing\n(root/'2025-07'/'receipts'/'secret.txt').write_text('x')\nassert rejects(root, '2025-07', 'receipt', 'secret.txt')            # exists but not a .pdf\nassert rejects(root, '2025-07', 'receipt', None)                    # no name\nassert rejects(root, '..', 'statement_pdf')                         # bad month\nassert rejects(root, '2025-07', 'bogus_kind')                       # bad kind\n(root/'2025-07'/'receipts'/'evil.pdf').symlink_to('/etc/hostname')  # symlink escape\nassert rejects(root, '2025-07', 'receipt', 'evil.pdf')\nassert rejects(root, '2025-07', 'receipt', 'evil\\x00.pdf')          # embedded null byte\n(root/'2025-07'/'receipts'/'loop-a.pdf').symlink_to(root/'2025-07'/'receipts'/'loop-b.pdf')\n(root/'2025-07'/'receipts'/'loop-b.pdf').symlink_to(root/'2025-07'/'receipts'/'loop-a.pdf')\nassert rejects(root, '2025-07', 'receipt', 'loop-a.pdf')            # symlink loop\n# a month dir that is itself a symlink out of the archive must not serve files\noutside = Path(tempfile.mkdtemp())\n(outside/'statement.pdf').write_bytes(b'%PDF outside the archive')\n(root/'2030-12').symlink_to(outside)\nassert rejects(root, '2030-12', 'statement_pdf')                    # month-dir symlink escape",
+    "crumbs": [
+      "archive"
+    ]
+  },
+  {
+    "objectID": "app.html",
+    "href": "app.html",
+    "title": "app",
+    "section": "",
+    "text": "create_app\ndef create_app(\n    archive_dir:str | pathlib.Path | None=None, # archive root (default: env ARCHIVE_DIR)\n    password:str | None=None, # shared password (default: env APP_PASSWORD)\n    session_secret:str | None=None, # session signing key (default: env SESSION_SECRET)\n):\nBuild the FastHTML viewer app; raise RuntimeError on missing/invalid config\n\n# test fixture: a throwaway archive matching the status.md contract in the spec\nimport tempfile\nfrom pathlib import Path\n\nSTATUS_MD = \"\"\"# {m} — receipt status\n\n| date | title | amount | status | receipt_file | note |\n|---|---|---|---|---|---|\n| {m}-29 | OPENAI *CHATGPT SUBSCR | -110.46 | collected | [{m}-29_openai.pdf](receipts/{m}-29_openai.pdf) | src=x.pdf |\n| {m}-06 | NORDEA | -20.46 | not-needed |  |  |\n\n**missing (retrievable from Gmail/portal/Nordea): 1**\n\"\"\"\n\ndef make_archive(months=('2025-07', '2025-08')):\n    root = Path(tempfile.mkdtemp())\n    (root/'README.md').write_text('readme')\n    (root/'notamonth').mkdir()\n    for m in months:\n        d = root/m\n        (d/'receipts').mkdir(parents=True)\n        (d/'statement.pdf').write_bytes(b'%PDF-1.4 fake')\n        (d/'statement.csv').write_text('date;amount\\n')\n        (d/'status.md').write_text(STATUS_MD.format(m=m))\n        (d/'receipts'/f'{m}-29_openai.pdf').write_bytes(b'%PDF-1.4 fake receipt')\n    return root\n\n\nfrom starlette.testclient import TestClient\n\nroot = make_archive()\napp = create_app(archive_dir=root, password='pw', session_secret='s3cret')\nclient = TestClient(app, base_url='https://testserver')  # https: Secure cookie must round-trip\n\n# unauthenticated -&gt; redirected to /login\nr = client.get('/', follow_redirects=False)\nassert r.status_code == 303 and r.headers['location'] == '/login'\n# static route removed; static-looking paths are not served (404, not accessible)\nassert client.get('/static/x.pdf', follow_redirects=False).status_code == 404\n# login page reachable without auth\nassert client.get('/login').status_code == 200\n# wrong password -&gt; error notice, still no access\nr = client.post('/login', data={'password': 'wrong'})\nassert 'Wrong password' in r.text\nassert client.get('/', follow_redirects=False).status_code == 303\n# correct password -&gt; index with months and counts\nr = client.post('/login', data={'password': 'pw'}, follow_redirects=False)\nassert r.status_code == 303\nr = client.get('/')\nassert r.status_code == 200 and '2025-07' in r.text and '2025-08' in r.text\nassert '&lt;th&gt;collected&lt;/th&gt;' in r.text and '&lt;th&gt;not-needed&lt;/th&gt;' in r.text and '&lt;th&gt;missing&lt;/th&gt;' in r.text and 'class=\"has-missing\"' in r.text, r.text\nassert r.text.index('2025-08') &lt; r.text.index('2025-07')   # newest month first\nr = client.get('/')   # ログイン済み client で\nassert r.text.count('id=\"detail-') == 2      # 月数ぶんの placeholder 行\nassert r.text.count('id=\"btn-') == 2         # 月数ぶんの ▸ ボタン\n# logout ends the session\nclient.get('/logout', follow_redirects=False)\nassert client.get('/', follow_redirects=False).status_code == 303\n# non-ASCII password must not break login (compare_digest works on bytes)\napp2 = create_app(archive_dir=root, password='pässwörd', session_secret='s3cret')\nc2 = TestClient(app2, base_url='https://testserver')\nassert c2.post('/login', data={'password': 'pässwörd'}, follow_redirects=False).status_code == 303\nassert 'Wrong password' in c2.post('/login', data={'password': 'wröng'}).text\n# missing config fails fast\ntry:\n    create_app(archive_dir=root, password='pw'); assert False, 'should have raised'\nexcept RuntimeError as e:\n    assert 'SESSION_SECRET' in str(e)\n\n\n# missing=0 month gets no highlight\nroot = make_archive()\np = root/'2025-08'/'status.md'\np.write_text(p.read_text().replace(': 1', ': 0'))\napp = create_app(archive_dir=root, password='pw', session_secret='s3cret')\nclient = TestClient(app, base_url='https://testserver')\nclient.post('/login', data={'password': 'pw'})\nr = client.get('/')\nassert r.text.count('class=\"has-missing\"') == 1, r.text   # 2025-07 only\n\n\nroot = make_archive()\napp = create_app(archive_dir=root, password='pw', session_secret='s3cret')\nclient = TestClient(app, base_url='https://testserver')\nclient.post('/login', data={'password': 'pw'})\n\nr = client.get('/m/2025-07')\nassert r.status_code == 200\nassert '/m/2025-07/receipt/2025-07-29_openai.pdf' in r.text   # rewritten receipt link\nassert '/m/2025-07/statement.pdf' in r.text and '/m/2025-07/statement.csv' in r.text\nassert client.get('/m/1999-01').status_code == 404            # unknown month\n\n\nroot = make_archive()\napp = create_app(archive_dir=root, password='pw', session_secret='s3cret')\nclient = TestClient(app, base_url='https://testserver')\nclient.post('/login', data={'password': 'pw'})\n\nassert client.get('/m/2025-07/statement.pdf').content.startswith(b'%PDF')\nassert client.get('/m/2025-07/statement.csv').status_code == 200\nassert client.get('/m/2025-07/receipt/2025-07-29_openai.pdf').content.startswith(b'%PDF')\nassert client.get('/m/2025-07/receipt/nope.pdf').status_code == 404\n# downloads never bypass auth\nanon = TestClient(app, base_url='https://testserver')\nassert anon.get('/m/2025-07/receipt/2025-07-29_openai.pdf', follow_redirects=False).status_code == 303\n\n\n# expand partial: auth, guard, fragment\nroot = make_archive()\napp = create_app(archive_dir=root, password='pw', session_secret='s3cret')\nclient = TestClient(app, base_url='https://testserver')\nclient.post('/login', data={'password': 'pw'})\nanon = TestClient(app, base_url='https://testserver')\nassert anon.get('/m/2025-07/expand', follow_redirects=False).status_code == 303   # auth\nassert client.get('/m/not-a-month/expand').status_code == 404                     # guard\nassert client.get('/m/1999-01/expand').status_code == 404\nr = client.get('/m/2025-07/expand', headers={'HX-Request': 'true'})\nassert 'id=\"detail-2025-07\"' in r.text and '/m/2025-07/receipt/' in r.text\nassert '&lt;html' not in r.text                                                      # fragment, not a page\nassert 'hx-swap-oob' in r.text\nassert '/m/2025-07/statement.pdf' in r.text and '/m/2025-07/statement.csv' in r.text\n\n\n# collapse partial: auth, guard, empty placeholder + OOB ▸\nroot = make_archive()\napp = create_app(archive_dir=root, password='pw', session_secret='s3cret')\nclient = TestClient(app, base_url='https://testserver')\nclient.post('/login', data={'password': 'pw'})\n\nanon = TestClient(app, base_url='https://testserver')\nassert anon.get('/m/2025-07/collapse', follow_redirects=False).status_code == 303\nassert client.get('/m/not-a-month/collapse').status_code == 404\nr = client.get('/m/2025-07/collapse', headers={'HX-Request': 'true'})\nassert 'id=\"detail-2025-07\"' in r.text and '/m/2025-07/receipt/' not in r.text   # 空の placeholder\nassert 'id=\"btn-2025-07\"' in r.text and 'hx-swap-oob' in r.text                  # OOB の ▸\n\n\n\n\nserve\ndef serve(\n    host:str='0.0.0.0', # bind address\n    port:int=8000, # port\n):\nRun the viewer under uvicorn; config comes from env\n\nroot = make_archive()\napp = create_app(archive_dir=root, password='pw', session_secret='s3cret')\nclient = TestClient(app, base_url='https://testserver')\nclient.post('/login', data={'password': 'pw'})\n\nfrom IPython.display import HTML\nHTML(client.get('/').text)\n\n\n\n  \n    reconcile-archive\n    \n    \n    \n    \n    \n  \n  \n      reconcile-archive\n      \n      \n\n\n\n\n\n\n\n\n\nmonth\ncollected\nnot-needed\nmissing\n\n\n\n\n\n▸\n\n2025-08\n1\n1\n1\n\n\n\n\n\n\n\n\n\n▸\n\n2025-07\n1\n1\n1\n\n\n\n\n\n\n\n\n\n\n      \nLogout      \n  \n\n\n\n\n# browser smoke: sess_https_only を無効化した dev app を JupyUvi で起動\nfrom starlette.middleware.sessions import SessionMiddleware\nfrom fasthtml.jupyter import JupyUvi\n\nroot = make_archive()\napp_dev = create_app(archive_dir=root, password='pw', session_secret='s3cret')\nfor mw in app_dev.user_middleware:                      # 実験用: Secure cookie 要件だけ外す\n  if mw.cls is SessionMiddleware: mw.kwargs['https_only'] = False\nserver = JupyUvi(app_dev, port=8000)\n# 終わったら: server.stop()\n\n\n\n\n\n\nserver.stop()",
+    "crumbs": [
+      "app"
+    ]
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "reconcile-web",
+    "section": "",
+    "text": "If you are new to using nbdev here are some useful pointers to get you started.\n\n\n# make sure reconcile_web package is installed in development mode\n$ pip install -e .\n\n# make changes under nbs/ directory\n# ...\n\n# compile to have changes apply to reconcile_web\n$ nbdev_prepare",
+    "crumbs": [
+      "reconcile-web"
+    ]
+  },
+  {
+    "objectID": "index.html#developer-guide",
+    "href": "index.html#developer-guide",
+    "title": "reconcile-web",
+    "section": "",
+    "text": "If you are new to using nbdev here are some useful pointers to get you started.\n\n\n# make sure reconcile_web package is installed in development mode\n$ pip install -e .\n\n# make changes under nbs/ directory\n# ...\n\n# compile to have changes apply to reconcile_web\n$ nbdev_prepare",
+    "crumbs": [
+      "reconcile-web"
+    ]
+  },
+  {
+    "objectID": "index.html#usage",
+    "href": "index.html#usage",
+    "title": "reconcile-web",
+    "section": "Usage",
+    "text": "Usage\n\nInstallation\nThis is a private repository (real financial data lives in the companion reconcile-archive repo) — it is not published to pypi or conda. Install from a clone:\n$ git clone https://github.com/doyu/reconcile-web.git\n$ cd reconcile-web && pip install -e .\n\n\nDocumentation\nDocumentation can be found hosted on this GitHub repository’s pages.",
+    "crumbs": [
+      "reconcile-web"
+    ]
+  },
+  {
+    "objectID": "index.html#how-to-use",
+    "href": "index.html#how-to-use",
+    "title": "reconcile-web",
+    "section": "How to use",
+    "text": "How to use\nA read-only viewer over a reconcile-archive checkout. Configuration is env-only:\n\n\n\n\n\n\n\nenv\nmeaning\n\n\n\n\nARCHIVE_DIR\npath to the reconcile-archive checkout\n\n\nAPP_PASSWORD\nthe single shared login password\n\n\nSESSION_SECRET\nsession-cookie signing key (generate once per deployment)\n\n\n\nRun:\nARCHIVE_DIR=~/reconcile-archive APP_PASSWORD=... SESSION_SECRET=... \\\n  uvicorn --factory reconcile_web.app:create_app\nor python -c \"from reconcile_web.app import serve; serve()\". HTTPS termination is the reverse proxy’s job; the app must never be exposed directly.",
+    "crumbs": [
+      "reconcile-web"
+    ]
+  },
+  {
+    "objectID": "sync.html",
+    "href": "sync.html",
+    "title": "sync",
+    "section": "",
+    "text": "The laptop’s ~/reconcile-archive checkout is the source of truth; the box’s viewer reads a pushed copy at /srv/reconcile-archive. The --chmod=D2750,F640 policy is what makes the copy readable by the box’s reconcile service user (group-read, setgid dirs) and by nobody else — baking it in here is the point of the command. The app is stateless: after a push the new months are live, no restart needed.",
+    "crumbs": [
+      "sync"
+    ]
+  },
+  {
+    "objectID": "sync.html#push_cmd",
+    "href": "sync.html#push_cmd",
+    "title": "sync",
+    "section": "push_cmd",
+    "text": "push_cmd\n\n\npush_cmd\ndef push_cmd(\n    src:str='~/reconcile-archive', # archive checkout (source of truth)\n    dest:str='doyu@box.ninjalabo.ai:/srv/reconcile-archive', # rsync target on the box\n    dry_run:bool=False, # add rsync --dry-run\n)-&gt;list: # rsync argv\nBuild the rsync argv: archive push with the box’s group-read/setgid policy baked in.\n\ncmd = push_cmd()\nassert cmd[0] == \"rsync\"\nassert \"-a\" in cmd and \"--delete\" in cmd\n# the box's permission policy is baked in, not remembered by humans\nassert \"--chmod=D2750,F640\" in cmd\n# -a implies -g, which as doyu re-groups everything to doyu and locks out the\n# box's reconcile service user (the 500 we shipped on day one) — never preserve\n# the laptop's group; the setgid dir assigns group reconcile instead\nassert \"--no-group\" in cmd\n# trailing slashes on both ends: sync the CONTENTS of src into dest, no nested dir\nassert cmd[-2].endswith(\"/\") and not cmd[-2].endswith(\"//\")\nassert cmd[-1] == \"doyu@box.ninjalabo.ai:/srv/reconcile-archive/\"\n# ~ is expanded so subprocess (no shell) can use the path\nassert \"~\" not in cmd[-2]\n# dry_run toggles rsync's own flag\nassert \"--dry-run\" not in cmd\nassert \"--dry-run\" in push_cmd(dry_run=True)\n# overrides pass through\nc2 = push_cmd(src=\"/tmp/a\", dest=\"host:/x\")\nassert c2[-2] == \"/tmp/a/\" and c2[-1] == \"host:/x/\"",
+    "crumbs": [
+      "sync"
+    ]
+  },
+  {
+    "objectID": "sync.html#reconcile_push",
+    "href": "sync.html#reconcile_push",
+    "title": "sync",
+    "section": "reconcile_push",
+    "text": "reconcile_push\n\n\nreconcile_push\ndef reconcile_push(\n    src:str='~/reconcile-archive', # archive checkout (source of truth)\n    dest:str='doyu@box.ninjalabo.ai:/srv/reconcile-archive', # rsync target on the box\n    dry_run:bool=False, # preview: rsync --dry-run\n):\nPush the archive to the box (the viewer reads it live; no restart needed)",
+    "crumbs": [
+      "sync"
+    ]
+  },
+  {
+    "objectID": "2026-07-18-index-table-kata.html",
+    "href": "2026-07-18-index-table-kata.html",
+    "title": "learn/index-table kata — FastHTML の学び(2026-07-18)",
+    "section": "",
+    "text": "learn/index-table kata — FastHTML の学び(2026-07-18)\nindex() の Ul → Table 書き換え(#6)で踏んだ地雷と学び。diff は3行相当、学びは6個。\n\nFT の文字列はデフォルトで HTML エスケープ。show(response.text) が効かないのはこのため (to_xml が str を escape する)。信頼済み HTML は NotStr で明示 — month_view() の status_html 包みと同じ仕組み。\nroute の同一性は path + name + methods。name は関数の qualified name 由来なので、 create_app 内の index は create_app_index。notebook からのホットスワップは @rt('/', name='create_app_index') と明示しないと「置き換え」でなく「追記」になり、 先勝ちで旧ハンドラが生き続ける。\nJupyter のカーネル状態はソース編集に追随しない。typo 修正・セル削除・改名の後に 旧オブジェクトが生き残る事故を3回踏んだ。復旧はハーネスから流し直し、確定は Restart & Run All(= セルの並びだけが真実)。\nリストは * で展開して渡す(Tbody(*rows))。逆に FT オブジェクトに * を付けると 子要素に分解されてタグが消える(Table(*thead) の罠)。\nCSS は継承より直指定が勝つ。.has-missing {color} は tr 止まりで、Jupyter の td 規則に 負ける → .has-missing td {color}。さらに未 Trust の notebook は &lt;style&gt; を サニタイザが剥がす(Trust Notebook で解決)。構造は notebook、見た目はブラウザで検証。\nTestClient は Cookie jar を持つステートフル。前セルの logout がリークして負けた。 テストセルは root/app/client を毎回作る自己完結型に(この notebook の既存流儀の理由)。\n\nその他: import * は fast.ai 流として採用(nbdev が __all__ を生成するので公開 API は不変)。 ローカル起動は自己署名証明書必須(sess_https_only=True)。box 更新は reconcile-deploy 一発。"
+  },
+  {
+    "objectID": "2026-07-19-month-expand-kata.html",
+    "href": "2026-07-19-month-expand-kata.html",
+    "title": "learn/month-expand kata — HTMX の学び(2026-07-19)",
+    "section": "",
+    "text": "learn/month-expand kata — HTMX の学び(2026-07-19)\nissue #7(inline month expansion)より。#6 の続編。\n\nOOB swap は id 一致だけが頼り。置換後の要素が id を持たないと次の OOB が迷子になる (▾ にも id=btn-{m} が必須 — panel レビューが実装前に検出)。ボタンは oob= 引数付きの 共通コンストラクタで対称に。\nswap 先を常設 placeholder(同 id の Tr を outerHTML 置換)にすると冪等。afterend + delete OOB 案の3リスク(連打増殖・OOB 迷子・detached swap)が構造ごと消えた。 「レースを防ぐ」より「レースが存在しない形にする」。\nFastHTML は HX-Request ヘッダで fragment/full-page を切り替える(core.py is_full_page)。 TestClient で断片を検証するときは headers={‘HX-Request’: ‘true’} 必須。\nテストは「どのレスポンスの仕様か」に置く。expand の仕様(statement links)を collapse の テストに書いて偽 red を踏んだ。対称設計はテストも対称(expand=全部ある / collapse=空)。\nリファクタで挙動が変わってもテストが黙っていたら、それはテストの穴(oob= 化で hx-swap-oob が 消えたのに green のままだった)。\n実ブラウザ確認は Playwright で自動化できる(dev server は SessionMiddleware の https_only だけ外す3行パッチ。JupyUvi の代替)。\nパース禁止の不透明ブロックの見た目調整は CSS で — status.md の H1 は DOM を触らず display:none だけで消した。契約・アーカイブ・収集スキルは無変更のまま表示だけ変える。\n\n設計経緯: 初案 afterend+delete → cross-LLM panel + レビュー2巡で placeholder 冪等方式(v2)に。 経緯の詳細は issue #7 本文と編集履歴。"
+  },
+  {
+    "objectID": "deploy.html",
+    "href": "deploy.html",
+    "title": "deploy",
+    "section": "",
+    "text": "The box pip-installs this app from GitHub main (baked into the boxrecipe cloud-init), so origin/main is the only deployable source — the command refuses to run when the local HEAD is ahead of it. After the reinstall the recipe’s two permission lines are re-applied verbatim: root’s pip writes files under whatever umask it inherits, and the service user reads the venv via group only (the class of bug that bit discopipe and the first archive push). In-place deploy and a fresh rebuild therefore converge on the same state.",
+    "crumbs": [
+      "deploy"
+    ]
+  },
+  {
+    "objectID": "deploy.html#deploy_cmd",
+    "href": "deploy.html#deploy_cmd",
+    "title": "deploy",
+    "section": "deploy_cmd",
+    "text": "deploy_cmd\n\n\ndeploy_cmd\ndef deploy_cmd(\n    host:str='doyu@box.ninjalabo.ai', # ssh target (sudo-capable login user)\n    deps:bool=False, # also reinstall dependencies\n)-&gt;list: # ssh argv\nBuild the ssh argv: pip reinstall from GitHub main + recipe perms + restart.\n\ncmd = deploy_cmd()\nassert cmd[0] == \"ssh\" and cmd[1] == \"doyu@box.ninjalabo.ai\" and len(cmd) == 3\nremote = cmd[2]\n# fail fast on any step\nassert remote.startswith(\"set -e\")\n# reinstall from the only deployable source; deps stay pinned by default\nassert \"/opt/reconcile/bin/pip install --upgrade --force-reinstall --no-deps git+https://github.com/doyu/reconcile-web.git\" in remote\nassert \"--no-deps\" not in deploy_cmd(deps=True)[2]\n# the recipe's permission lines, re-applied after root's pip wrote files\nassert \"chown -R root:reconcile /opt/reconcile\" in remote\nassert \"chmod -R u=rwX,g=rX,o= /opt/reconcile\" in remote\nassert remote.index(\"pip install\") &lt; remote.index(\"chown\") &lt; remote.index(\"chmod\")\n# restart last, then report the unit state\nassert remote.index(\"chmod\") &lt; remote.index(\"systemctl restart reconcile\")\nassert \"systemctl is-active reconcile\" in remote\n# host override passes through\nassert deploy_cmd(host=\"x@y\")[1] == \"x@y\"",
+    "crumbs": [
+      "deploy"
+    ]
+  },
+  {
+    "objectID": "deploy.html#reconcile_deploy",
+    "href": "deploy.html#reconcile_deploy",
+    "title": "deploy",
+    "section": "reconcile_deploy",
+    "text": "reconcile_deploy\n\n\nreconcile_deploy\ndef reconcile_deploy(\n    host:str='doyu@box.ninjalabo.ai', # ssh target (sudo-capable login user)\n    repo:str='~/reconcile-web', # local checkout, used to check HEAD is pushed\n    deps:bool=False, # also reinstall dependencies\n):\nDeploy the pushed main to the box: pip reinstall + recipe perms + restart",
+    "crumbs": [
+      "deploy"
+    ]
+  }
+]
