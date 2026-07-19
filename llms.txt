@@ -11,4 +11,5 @@
 - [docs/superpowers/specs/2026-07-02-reconcile-web-design.md](docs/superpowers/specs/2026-07-02-reconcile-web-design.md): Approved v1 design: deterministic thin viewer over the status.md contract, security invariants, auth
 - [docs/superpowers/plans/2026-07-02-reconcile-web-v1.md](docs/superpowers/plans/2026-07-02-reconcile-web-v1.md): Task-by-task TDD implementation plan for v1: two nbdev notebooks, auth gate, routes, tests
 - [nbs/2026-07-18-index-table-kata.md](nbs/2026-07-18-index-table-kata.md): FastHTML lessons from the index-table kata: FT escaping, route identity, kernel state, CSS, TestClient
+- [nbs/2026-07-19-month-expand-kata.md](nbs/2026-07-19-month-expand-kata.md): HTMX lessons from the month-expand kata: OOB id matching, idempotent placeholder swaps, HX-Request
 <!-- END AUTO -->
