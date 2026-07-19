@@ -45,7 +45,7 @@ def create_app(
     # already names the month, and status.md is an opaque NotStr (never parsed)
     css = Style('.has-missing td {color: var(--pico-del-color, #c62828)}\n'
                 'tbody button {width: auto; display: inline-block; padding: 0 .5em; margin-right: .5em}\n'
-                'tr[id^="detail-"] p:first-child {margin: 0; text-align: right; font-size: .85em}\n'
+                'tr[id^="detail-"] p:first-child {margin: .25em 0}\n'
                 'tr[id^="detail-"] h1, main > h1 ~ h1 {display: none}')
 
     # skip list covers only /login (every other route requires auth); the app serves no local
