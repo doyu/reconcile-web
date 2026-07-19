@@ -36,6 +36,10 @@ def create_app(
     def _check_month(month):
         if month not in list_months(archive_dir): raise HTTPException(404)
 
+    def statement_links(m):
+        return P(A('statement.pdf', href=f'/m/{m}/statement.pdf'), ' · ',
+                 A('statement.csv', href=f'/m/{m}/statement.csv'))
+
     # skip list covers only /login (every other route requires auth); the app serves no local
     # static files (Pico CSS comes from the CDN), so fast_app's default static route is removed
     # right after creation below — its extension list (pdf/csv) would otherwise shadow the
@@ -55,9 +59,10 @@ def create_app(
                       hx_swap='outerHTML', id=f'btn-{m}',
                       hx_swap_oob='true' if oob else None)
 
-    def collapse_btn(m):
+    def collapse_btn(m, oob=False):
         return Button('▾', hx_get=f'/m/{m}/collapse', hx_target=f'#detail-{m}',
-                      hx_swap='outerHTML', id=f'btn-{m}', hx_swap_oob='true')
+                      hx_swap='outerHTML', id=f'btn-{m}',
+                      hx_swap_oob='true' if oob else None)
 
     def month_row(m):
         c = month_counts(archive_dir, m)
@@ -94,16 +99,16 @@ def create_app(
     def index():
         return Titled('reconcile-archive',
                       Style('.has-missing td {color: var(--pico-del-color, #c62828)}\n'
-                            'tbody button {width: auto; display: inline-block; padding: 0 .5em; margin-right: .5em}'),
+                            'tbody button {width: auto; display: inline-block; padding: 0 .5em; margin-right: .5em}\n'
+                            'tr[id^="detail-"] p:first-child {margin: 0; text-align: right; font-size: .85em}'),
                       months_table(),
                       P(A('Logout', href='/logout')))
-    
+
     @rt('/m/{month}', methods=['GET'])
     def month_view(month: str):
         _check_month(month)
         return Titled(month,
-            P(A('statement.pdf', href=f'/m/{month}/statement.pdf'), ' · ',
-              A('statement.csv', href=f'/m/{month}/statement.csv')),
+            statement_links(month),
             NotStr(status_html(archive_dir, month)),
             P(A('← months', href='/')))
 
@@ -123,13 +128,13 @@ def create_app(
     @rt('/m/{month}/expand', methods=['GET'])
     def expand(month: str):
         _check_month(month)
-        return (Tr(Td(NotStr(status_html(archive_dir, month)), colspan=4), id=f'detail-{month}'), collapse_btn(month))
+        return (Tr(Td(statement_links(month), NotStr(status_html(archive_dir, month)), colspan=4), id=f'detail-{month}'), collapse_btn(month, oob=True))
 
     @rt('/m/{month}/collapse', methods=['GET'])
     def collapse(month: str):
         _check_month(month)
         return Tr(id=f'detail-{month}'), expand_btn(month, oob=True)
-    
+
     return app
 
 # %% ../nbs/01_app.ipynb #faed463d
