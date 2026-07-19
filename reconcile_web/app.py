@@ -50,9 +50,11 @@ def create_app(
         if error: body.insert(0, P('Wrong password'))
         return Titled('Login', *body)
 
-    def expand_btn(m):
-        return Button('▸', hx_get=f'/m/{m}/expand', hx_target=f'#detail-{m}', hx_swap='outerHTML', id=f'btn-{m}')
-    
+    def expand_btn(m, oob=False):
+        return Button('▸', hx_get=f'/m/{m}/expand', hx_target=f'#detail-{m}',
+                      hx_swap='outerHTML', id=f'btn-{m}',
+                      hx_swap_oob='true' if oob else None)
+
     def collapse_btn(m):
         return Button('▾', hx_get=f'/m/{m}/collapse', hx_target=f'#detail-{m}',
                       hx_swap='outerHTML', id=f'btn-{m}', hx_swap_oob='true')
@@ -123,6 +125,11 @@ def create_app(
         _check_month(month)
         return (Tr(Td(NotStr(status_html(archive_dir, month)), colspan=4), id=f'detail-{month}'), collapse_btn(month))
 
+    @rt('/m/{month}/collapse', methods=['GET'])
+    def collapse(month: str):
+        _check_month(month)
+        return Tr(id=f'detail-{month}'), expand_btn(month, oob=True)
+    
     return app
 
 # %% ../nbs/01_app.ipynb #faed463d
