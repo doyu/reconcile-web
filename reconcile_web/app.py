@@ -33,6 +33,9 @@ def create_app(
     def auth_before(req, session):
         if not session.get('auth'): return RedirectResponse('/login', status_code=303)
 
+    def _check_month(month):
+        if month not in list_months(archive_dir): raise HTTPException(404)
+
     # skip list covers only /login (every other route requires auth); the app serves no local
     # static files (Pico CSS comes from the CDN), so fast_app's default static route is removed
     # right after creation below — its extension list (pdf/csv) would otherwise shadow the
@@ -47,11 +50,14 @@ def create_app(
         if error: body.insert(0, P('Wrong password'))
         return Titled('Login', *body)
 
+    def expand_btn(m):
+        return Button('▸', hx_get=f'/m/{m}/expand', hx_target=f'#detail-{m}', hx_swap='outerHTML', id=f'btn-{m}')
+
     def month_row(m):
         c = month_counts(archive_dir, m)
         missing = c.get('missing', 0)
         return Tr(
-            Td(A(m, href=f'/m/{m}')),
+            Td(expand_btn(m), A(m, href=f'/m/{m}')),
             Td(c.get('collected', 0)),
             Td(c.get('not-needed', 0)),
             Td(missing),
@@ -60,7 +66,8 @@ def create_app(
     def months_table():
         return Table(
             Thead(Tr(Th('month'), Th('collected'), Th('not-needed'), Th('missing'))),
-            Tbody(*[month_row(m) for m in reversed(list_months(archive_dir))]))
+            Tbody(*[el for m in reversed(list_months(archive_dir))
+                    for el in (month_row(m), Tr(id=f'detail-{m}'))]))
 
     @rt('/login', methods=['GET'])
     def login_form(): return login_page()
@@ -83,10 +90,10 @@ def create_app(
                       Style('.has-missing td {color: var(--pico-del-color, #c62828)}'),
                       months_table(),
                       P(A('Logout', href='/logout')))
-
+    
     @rt('/m/{month}', methods=['GET'])
     def month_view(month: str):
-        if month not in list_months(archive_dir): raise HTTPException(404)
+        _check_month(month)
         return Titled(month,
             P(A('statement.pdf', href=f'/m/{month}/statement.pdf'), ' · ',
               A('statement.csv', href=f'/m/{month}/statement.csv')),
