@@ -52,6 +52,10 @@ def create_app(
 
     def expand_btn(m):
         return Button('▸', hx_get=f'/m/{m}/expand', hx_target=f'#detail-{m}', hx_swap='outerHTML', id=f'btn-{m}')
+    
+    def collapse_btn(m):
+        return Button('▾', hx_get=f'/m/{m}/collapse', hx_target=f'#detail-{m}',
+                      hx_swap='outerHTML', id=f'btn-{m}', hx_swap_oob='true')
 
     def month_row(m):
         c = month_counts(archive_dir, m)
@@ -87,7 +91,8 @@ def create_app(
     @rt('/', methods=['GET'])
     def index():
         return Titled('reconcile-archive',
-                      Style('.has-missing td {color: var(--pico-del-color, #c62828)}'),
+                      Style('.has-missing td {color: var(--pico-del-color, #c62828)}\n'
+                            'tbody button {width: auto; display: inline-block; padding: 0 .5em; margin-right: .5em}'),
                       months_table(),
                       P(A('Logout', href='/logout')))
     
@@ -112,6 +117,11 @@ def create_app(
 
     @rt('/m/{month}/receipt/{name}', methods=['GET'])
     def receipt(month: str, name: str): return _file(month, 'receipt', name)
+
+    @rt('/m/{month}/expand', methods=['GET'])
+    def expand(month: str):
+        _check_month(month)
+        return (Tr(Td(NotStr(status_html(archive_dir, month)), colspan=4), id=f'detail-{month}'), collapse_btn(month))
 
     return app
 
