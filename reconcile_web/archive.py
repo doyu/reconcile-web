@@ -63,7 +63,7 @@ def status_html(
 def safe_file(
     archive_dir: str|Path,  # archive root
     month: str,             # month name like '2025-07'
-    kind: str,              # 'statement_pdf' | 'statement_csv' | 'receipt'
+    kind: str,              # 'statement_nda' | 'statement_html' | 'statement_pdf' | 'statement_csv' | 'receipt'
     name: str|None = None,  # receipt filename (receipt kind only)
 ) -> Path:                  # resolved file inside the month dir
     "Resolve a servable file; raise FileNotFoundError on traversal or anything missing"
@@ -71,8 +71,10 @@ def safe_file(
     root = Path(archive_dir).resolve()
     mdir = (root/month).resolve()
     if not mdir.is_relative_to(root): raise FileNotFoundError(month)  # month dir symlinked out
-    if kind == 'statement_pdf':   p = mdir/'statement.pdf'
-    elif kind == 'statement_csv': p = mdir/'statement.csv'
+    if kind == 'statement_pdf':    p = mdir/'statement.pdf'
+    elif kind == 'statement_csv':  p = mdir/'statement.csv'
+    elif kind == 'statement_nda':  p = mdir/'statement.nda'
+    elif kind == 'statement_html': p = mdir/'statement.html'
     elif kind == 'receipt':
         if not name or name != Path(name).name or not name.endswith('.pdf'):
             raise FileNotFoundError(name)
