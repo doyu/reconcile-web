@@ -36,9 +36,13 @@ def create_app(
     def _check_month(month):
         if month not in list_months(archive_dir): raise HTTPException(404)
 
+    # .nda/.html are the bank-issued raw statements, present only from 2026-07 on;
+    # link what the month actually has so earlier months carry no dead links
+    STATEMENTS = ('statement.nda', 'statement.html', 'statement.pdf', 'statement.csv')
+
     def statement_links(m):
-        return P(A('statement.pdf', href=f'/m/{m}/statement.pdf'), ' · ',
-                 A('statement.csv', href=f'/m/{m}/statement.csv'))
+        ls = [A(n, href=f'/m/{m}/{n}') for n in STATEMENTS if (Path(archive_dir)/m/n).is_file()]
+        return P(*[x for a in ls for x in (' · ', a)][1:])
 
     # app-wide CSS: missing-row highlight, inline expand buttons, tucked statement
     # links, and hiding status.md's own "# YYYY-MM — receipt status" H1 — the page
@@ -117,8 +121,8 @@ def create_app(
             NotStr(status_html(archive_dir, month)),
             P(A('← months', href='/')))
 
-    def _file(month, kind, name=None):
-        try: return FileResponse(safe_file(archive_dir, month, kind, name))
+    def _file(month, kind, name=None, media_type=None):
+        try: return FileResponse(safe_file(archive_dir, month, kind, name), media_type=media_type)
         except FileNotFoundError: raise HTTPException(404)
 
     @rt('/m/{month}/statement.pdf', methods=['GET'])
@@ -126,6 +130,15 @@ def create_app(
 
     @rt('/m/{month}/statement.csv', methods=['GET'])
     def statement_csv(month: str): return _file(month, 'statement_csv')
+
+    @rt('/m/{month}/statement.nda', methods=['GET'])
+    def statement_nda(month: str): return _file(month, 'statement_nda')
+
+    # the bank issues this HTML as ISO-8859-1; the Content-Type header overrides the
+    # file's own <meta charset>, so declare it or Finnish ä/ö arrive as mojibake
+    @rt('/m/{month}/statement.html', methods=['GET'])
+    def statement_html_file(month: str):
+        return _file(month, 'statement_html', media_type='text/html; charset=ISO-8859-1')
 
     @rt('/m/{month}/receipt/{name}', methods=['GET'])
     def receipt(month: str, name: str): return _file(month, 'receipt', name)
