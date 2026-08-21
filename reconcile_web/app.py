@@ -11,9 +11,9 @@ __all__ = ['create_app', 'serve']
 import os, secrets
 from pathlib import Path
 from fasthtml.common import *
-from starlette.responses import RedirectResponse, FileResponse
+from starlette.responses import RedirectResponse, FileResponse, Response
 from starlette.exceptions import HTTPException
-from .archive import list_months, month_counts, status_html, safe_file
+from .archive import list_months, month_counts, status_html, safe_file, month_zip
 
 # %% ../nbs/01_app.ipynb #26a2db0f
 def create_app(
@@ -42,6 +42,7 @@ def create_app(
 
     def statement_links(m):
         ls = [A(n, href=f'/m/{m}/{n}') for n in STATEMENTS if (Path(archive_dir)/m/n).is_file()]
+        ls.append(A('all.zip', href=f'/m/{m}/all.zip'))
         return P(*[x for a in ls for x in (' · ', a)][1:])
 
     # app-wide CSS: missing-row highlight, inline expand buttons, tucked statement
@@ -142,6 +143,14 @@ def create_app(
 
     @rt('/m/{month}/receipt/{name}', methods=['GET'])
     def receipt(month: str, name: str): return _file(month, 'receipt', name)
+
+    # built on the fly, in memory — the zip always mirrors the month dir as pushed
+    @rt('/m/{month}/all.zip', methods=['GET'])
+    def month_zip_file(month: str):
+        try: body = month_zip(archive_dir, month)
+        except FileNotFoundError: raise HTTPException(404)
+        return Response(body, media_type='application/zip',
+                        headers={'Content-Disposition': f'attachment; filename="ninjalabo-{month}.zip"'})
 
     @rt('/m/{month}/expand', methods=['GET'])
     def expand(month: str):
