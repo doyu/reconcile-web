@@ -47,7 +47,7 @@ Two notebooks → two modules, deliberately layered so the data layer could late
 Real financial data — these are load-bearing and each has a test:
 
 - **Every route except `/login` sits behind the `Beforeware` auth gate.** Files are served only through authed routes, never statically; the `fast_app` default static route is removed right after app creation (its pdf/csv extension list would shadow the authed `.pdf`/`.csv` routes).
-- **`safe_file` contains all file serving to the resolved archive root**: month must match `YYYY-MM`, receipt names are basename-only `.pdf`, symlink escapes are caught by `resolve()` + `is_relative_to` checks. Everything invalid raises `FileNotFoundError` (→ 404), never an error page with detail.
+- **All file serving is contained to the resolved archive root** — two paths, same discipline: `safe_file` resolves single files (month must match `YYYY-MM`, receipt names are basename-only `.pdf`, symlink escapes caught by `resolve()` + `is_relative_to`); `month_zip` bundles a whole month and containment-checks **every enumerated entry**, not just files (`rglob` does not descend directory symlinks, so a files-only pass would silently drop an escaping one — fail closed, never a partial zip). Everything invalid raises `FileNotFoundError` (→ 404), never an error page with detail.
 - **`status_html` treats `status.md` as untrusted**: raw HTML is escaped before rendering, receipt links are rewritten on the raw Markdown text, and a post-render pass strips any `href` not starting with `/m/` (Markdown `[x](javascript:…)` survives escaping; the allowlist closes it).
 - Password check uses `secrets.compare_digest` on **bytes** (non-ASCII passwords).
 
