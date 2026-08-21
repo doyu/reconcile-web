@@ -42,8 +42,12 @@ def create_app(
 
     def statement_links(m):
         ls = [A(n, href=f'/m/{m}/{n}') for n in STATEMENTS if (Path(archive_dir)/m/n).is_file()]
-        ls.append(A('all.zip', href=f'/m/{m}/all.zip'))
         return P(*[x for a in ls for x in (' · ', a)][1:])
+
+    # a page action, not a source file — placed at the bottom of the month view,
+    # after the table, never among the statement source links at the top
+    def zip_link(m):
+        return P(A('all.zip', href=f'/m/{m}/all.zip'))
 
     # app-wide CSS: missing-row highlight, inline expand buttons, tucked statement
     # links, and hiding status.md's own "# YYYY-MM — receipt status" H1 — the page
@@ -120,6 +124,7 @@ def create_app(
         return Titled(month,
             statement_links(month),
             NotStr(status_html(archive_dir, month)),
+            zip_link(month),
             P(A('← months', href='/')))
 
     def _file(month, kind, name=None, media_type=None):
@@ -155,7 +160,7 @@ def create_app(
     @rt('/m/{month}/expand', methods=['GET'])
     def expand(month: str):
         _check_month(month)
-        return (Tr(Td(statement_links(month), NotStr(status_html(archive_dir, month)), colspan=4), id=f'detail-{month}'), collapse_btn(month, oob=True))
+        return (Tr(Td(statement_links(month), NotStr(status_html(archive_dir, month)), zip_link(month), colspan=4), id=f'detail-{month}'), collapse_btn(month, oob=True))
 
     @rt('/m/{month}/collapse', methods=['GET'])
     def collapse(month: str):
