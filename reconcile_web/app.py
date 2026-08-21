@@ -44,10 +44,10 @@ def create_app(
         ls = [A(n, href=f'/m/{m}/{n}') for n in STATEMENTS if (Path(archive_dir)/m/n).is_file()]
         return P(*[x for a in ls for x in (' · ', a)][1:])
 
-    # a page action, not a source file — placed at the bottom of the month view,
-    # after the table, never among the statement source links at the top
+    # a page action, not a source file — bottom right of the month view, after
+    # the table, never among the statement source links at the top
     def zip_link(m):
-        return P(A('all.zip', href=f'/m/{m}/all.zip'))
+        return P(A('all.zip', href=f'/m/{m}/all.zip'), cls='zip-link')
 
     # app-wide CSS: missing-row highlight, inline expand buttons, tucked statement
     # links, and hiding status.md's own "# YYYY-MM — receipt status" H1 — the page
@@ -55,7 +55,8 @@ def create_app(
     css = Style('.has-missing td {color: var(--pico-del-color, #c62828)}\n'
                 'tbody button {width: auto; display: inline-block; padding: 0 .5em; margin-right: .5em}\n'
                 'tr[id^="detail-"] p:first-child {margin: .25em 0}\n'
-                'tr[id^="detail-"] h1, main > h1 ~ h1 {display: none}')
+                'tr[id^="detail-"] h1, main > h1 ~ h1 {display: none}\n'
+                '.zip-link {text-align: right}')
 
     # skip list covers only /login (every other route requires auth); the app serves no local
     # static files (Pico CSS comes from the CDN), so fast_app's default static route is removed
